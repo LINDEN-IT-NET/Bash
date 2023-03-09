@@ -1,0 +1,125 @@
+#!/bin/bash
+# Christian Linden, 230308
+
+# Das Script erzeugt einen Report in Tabellenform:
+# hostname      rhel-release    kernel-version
+# und erstellt drei sortierte Dateien, 1x nach hostnamen, 1x nach rhel-release
+# und 1x nach kernel-version.
+# Bei Interesse README lesen.
+
+# BefehlVariablen
+AWK=$(which awk)
+CAT=$(which cat)
+CP=$(which cp)
+CD=$(which cd)
+ECHO=$(which echo)
+GREP=$(which grep)
+LS=$(which ls)
+MOUNT=$(which mount)
+UMOUNT=$(which umount)
+PASTE=$(which paste)
+SED=$(which sed)
+SORT=$(which sort)
+TEE=$(which tee)
+TOUCH=$(which touch)
+
+# DateiVariablen
+WORKINGDIR=/root/ansible/playbooks/reports
+ANSIBLEPLAYBOOK=$(which ansible-playbook)
+CURRENTKERNEL7=$WORKINGDIR/helperfiles/current_kernel7.txt
+CURRENTKERNEL8=$WORKINGDIR/helperfiles/current_kernel8.txt
+DATEFILE=$WORKINGDIR/helperfiles/current_date.txt
+EMPTYFILE=$WORKINGDIR/helperfiles/emptyfile.txt
+HEADER=$WORKINGDIR/helperfiles/header.txt
+HEADERCOPY=$WORKINGDIR/helperfiles/header_copy.txt
+HEADER7=$WORKINGDIR/helperfiles/header7.txt
+HEADER8=$WORKINGDIR/helperfiles/header8.txt
+HOSTFILTER=$WORKINGDIR/helperfiles/hostnames.txt
+HOSTREPORT=$WORKINGDIR/resultfiles/GW-ReportSortedByHosts.txt
+RELEASEFILTER=$WORKINGDIR/helperfiles/rhel-releases.txt
+RELEASEREPORT=$WORKINGDIR/resultfiles/GW-ReportSortedByRelease.txt
+KERNELFILTER=$WORKINGDIR/helperfiles/kernels.txt
+KERNELREPORT=$WORKINGDIR/resultfiles/GW-ReportSortedByKernel.txt
+LINE1=$WORKINGDIR/helperfiles/header_line1.txt
+LINE2=$WORKINGDIR/helperfiles/header_line2.txt
+LINE3=$WORKINGDIR/helperfiles/header_line3.txt
+LINE4=$WORKINGDIR/helperfiles/header_line4.txt
+MOUNTPOINT=/mnt
+RHEL7REPODIR=/u01/export/2023Q1
+RHEL8REPODIR=/u01/export/2023_8_Q1
+RHEL7RPMDIR=rhel-7-server-rpms/Packages/k/kernel-3*
+RHEL8RPMDIR=rhel-8-for-x86_64-baseos-rpms/Packages/k/kernel-core*
+PLAYBOOK=$WORKINGDIR/get_report.yml
+PLAYBOOKLOG=$WORKINGDIR/helperfiles/playbook.log
+REPORT=$WORKINGDIR/resultfiles/report.txt
+# In Verzeichnis wechseln
+$CD $WORKINGDIR
+
+# Playbook ausführen; das Playbook schreibt den Ansible Output in eine Datei
+$ANSIBLEPLAYBOOK $PLAYBOOK | $TEE $PLAYBOOKLOG
+
+# Hostnamen filtern und in separate Datei schreiben
+$GREP -A1 --no-group-separator msg $PLAYBOOKLOG | $GREP -v msg | $GREP -v '\[' | $SED 's/\"//g' | $SED 's/\,//g' > $HOSTFILTER
+
+# Redhat-Version filtern und in separate Datei schreiben
+$GREP -A2 --no-group-separator msg $PLAYBOOKLOG | $GREP -v msg | $GREP -v '\[' | $GREP -i redhat| $SED 's/\"//g' | $SED 's/\,//g' > $RELEASEFILTER
+
+# Kernelversionen filtern und in separate Datei schreiben
+$GREP -A3 --no-group-separator msg $PLAYBOOKLOG | $GREP -v msg | $GREP -v '\[' | $SED 's/\"//g' | $SED 's/\,//g' | $SED 's/^[ \t]\+//g' | $GREP '^[[:digit:]]' > $KERNELFILTER
+
+# Die oben erstellten separaten Dateien spaltenweise in eine Tabelle mergen
+$PASTE $HOSTFILTER $RELEASEFILTER $KERNELFILTER > $REPORT
+
+# read-only-nfs share für repo7 mounten
+$MOUNT 10.135.177.200:$RHEL7REPODIR $MOUNTPOINT
+
+# Referenz- bzw. aktuellsten Kernel 7er-Kernel holen und in Datei schreiben
+#$LS -al /mnt/rhel-7-server-rpms/Packages/k/kernel-3* | $SED '$!d' | $AWK '{print $9}' | $AWK -F/ '{print $6}' > current_kernel7.txt
+$LS -al $MOUNTPOINT/$RHEL7RPMDIR | $AWK '{print $9}' | $AWK -F/ '{print $6}' | $AWK -F- '{print $2"-"$3}' | $SORT -V | $SED '$d' | $SED '$!d' > $CURRENTKERNEL7
+
+# read-only-nfs share unmounten
+$UMOUNT $MOUNTPOINT
+
+# read-only-nfs share für repo8 mounten
+$MOUNT 10.135.177.200:$RHEL8REPODIR $MOUNTPOINT
+
+# Referenz- bzw. aktuellsten Kernel 8ter-Kernel holen und in Datei schreiben
+$LS -al $MOUNTPOINT/$RHEL8RPMDIR | $AWK '{print $9}' | $AWK -F/ '{print $6}' | $AWK -F- '{print $3"-"$4}' | $SORT -V | $SED '$d' | $SED '$!d' > $CURRENTKERNEL8
+
+# read-only-nfs share unmounten
+$UMOUNT $MOUNTPOINT
+
+# Tabelle nach Hostnamen, Release und Kernel-Version sortieren
+
+$SORT -k1 -r $REPORT > $HOSTREPORT
+$SORT -k2 -r $REPORT > $RELEASEREPORT
+$SORT -k3 -r $REPORT > $KERNELREPORT
+
+# timestamp und aktuell verfügbaren Kernel in die Reports einfügen
+# aktuelles Datum bekommen
+$PASTE $EMPTYFILE $HEADER8 $CURRENTKERNEL8 > $LINE3
+$PASTE $EMPTYFILE $EMPTYFILE $EMPTYFILE > $LINE4
+$CAT $LINE1 $LINE2 $LINE3 $LINE4> $HEADER
+$CP $HEADER $HEADERCOPY
+
+# Kopfzeile in die Reports einfügen
+$ECHO "`$CAT $HOSTREPORT >> $HEADERCOPY`"
+$CP $HEADERCOPY $HOSTREPORT
+$CP $HEADER $HEADERCOPY
+$ECHO "`$CAT $RELEASEREPORT >> $HEADERCOPY`"
+$CP $HEADERCOPY $RELEASEREPORT
+$CP $HEADER $HEADERCOPY
+$ECHO "`$CAT $KERNELREPORT >> $HEADERCOPY`"
+$CP $HEADERCOPY $KERNELREPORT
+
+# Kopieren der Reports auf den nfs share
+
+# write-nfs share für reports mounten
+$MOUNT 10.135.177.200:/u01/smbshares/InfoBase/InfoBase/Kommunikation/Gateways/ftgw_patch_staende $MOUNTPOINT
+
+$CP -p $HOSTREPORT $MOUNTPOINT
+$CP -p $RELEASEREPORT $MOUNTPOINT
+$CP -p $KERNELREPORT $MOUNTPOINT
+
+# nfs share unmounten
+$UMOUNT $MOUNTPOINT
