@@ -45,8 +45,8 @@ LINE2=$WORKINGDIR/helperfiles/header_line2.txt
 LINE3=$WORKINGDIR/helperfiles/header_line3.txt
 LINE4=$WORKINGDIR/helperfiles/header_line4.txt
 MOUNTPOINT=/mnt
-RHEL7REPODIR=/u01/export/2023Q1
-RHEL8REPODIR=/u01/export/2023_8_Q1
+RHEL7REPODIR=/path/to/your/repoDir
+RHEL8REPODIR=/path/to/your/repoDir
 RHEL7RPMDIR=rhel-7-server-rpms/Packages/k/kernel-3*
 RHEL8RPMDIR=rhel-8-for-x86_64-baseos-rpms/Packages/k/kernel-core*
 PLAYBOOK=$WORKINGDIR/get_report.yml
@@ -71,7 +71,7 @@ $GREP -A3 --no-group-separator msg $PLAYBOOKLOG | $GREP -v msg | $GREP -v '\[' |
 $PASTE $HOSTFILTER $RELEASEFILTER $KERNELFILTER > $REPORT
 
 # read-only-nfs share für repo7 mounten
-$MOUNT 10.135.177.200:$RHEL7REPODIR $MOUNTPOINT
+$MOUNT yourNFSServer:$RHEL7REPODIR $MOUNTPOINT
 
 # Referenz- bzw. aktuellsten Kernel 7er-Kernel holen und in Datei schreiben
 #$LS -al /mnt/rhel-7-server-rpms/Packages/k/kernel-3* | $SED '$!d' | $AWK '{print $9}' | $AWK -F/ '{print $6}' > current_kernel7.txt
@@ -81,7 +81,7 @@ $LS -al $MOUNTPOINT/$RHEL7RPMDIR | $AWK '{print $9}' | $AWK -F/ '{print $6}' | $
 $UMOUNT $MOUNTPOINT
 
 # read-only-nfs share für repo8 mounten
-$MOUNT 10.135.177.200:$RHEL8REPODIR $MOUNTPOINT
+$MOUNT yourNFSServer.177.200:$RHEL8REPODIR $MOUNTPOINT
 
 # Referenz- bzw. aktuellsten Kernel 8ter-Kernel holen und in Datei schreiben
 $LS -al $MOUNTPOINT/$RHEL8RPMDIR | $AWK '{print $9}' | $AWK -F/ '{print $6}' | $AWK -F- '{print $3"-"$4}' | $SORT -V | $SED '$d' | $SED '$!d' > $CURRENTKERNEL8
@@ -115,7 +115,7 @@ $CP $HEADERCOPY $KERNELREPORT
 # Kopieren der Reports auf den nfs share
 
 # write-nfs share für reports mounten
-$MOUNT 10.135.177.200:/u01/smbshares/InfoBase/InfoBase/Kommunikation/Gateways/ftgw_patch_staende $MOUNTPOINT
+$MOUNT yourNFSServer:/path/to/your/share $MOUNTPOINT
 
 $CP -p $HOSTREPORT $MOUNTPOINT
 $CP -p $RELEASEREPORT $MOUNTPOINT
